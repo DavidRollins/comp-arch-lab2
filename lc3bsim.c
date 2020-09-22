@@ -406,7 +406,33 @@ int main(int argc, char *argv[]) {
 
 /***************************************************************/
 
+int sext(int value, int bits)
+{
+    int sign = (1 << (bits - 1)) & value;
+    int mask = ((~0U) >> (bits - 1)) << (bits - 1);
+    if (sign != 0)
+        value |= mask;
+    else
+        value &= ~mask;
+    return value;
+}
 
+void setcc(int reg) {
+   int b = reg>>15;
+   if (reg == 0) {
+      NEXT_LATCHES.P = 0;
+      NEXT_LATCHES.Z = 1;
+      NEXT_LATCHES.N = 0;
+   } else if (b == 1) {
+      NEXT_LATCHES.P = 0;
+      NEXT_LATCHES.Z = 0;
+      NEXT_LATCHES.N = 1;
+   } else {
+      NEXT_LATCHES.P = 1;
+      NEXT_LATCHES.Z = 0;
+      NEXT_LATCHES.N = 0;
+   }
+}
 
 void process_instruction(){
   /*  function: process_instruction
@@ -417,5 +443,314 @@ void process_instruction(){
    *       -Execute
    *       -Update NEXT_LATCHES
    */     
+  int instructionRegister = 0;
+  
+  if(CURRENT_LATCHES.PC/2 < WORDS_IN_MEM){
+    instructionRegister = (MEMORY[CURRENT_LATCHES.PC/2][1] << 8) + MEMORY[CURRENT_LATCHES.PC/2][0]; 
+    NEXT_LATCHES = CURRENT_LATCHES;
+    NEXT_LATCHES.PC = CURRENT_LATCHES.PC + 2; // next instruction
+  } else{
+    exit(1); // idk just feels like we shouldn't go past memory
+  }
+  
+  int opcode = ((instructionRegister) & (0xF000)) >> 12; // get opcode
+  
+  if (opcode == 0){ // br
+  /*
+    if ((n AND N) OR (z AND Z) OR (p AND P)) 
+    PC = PC + LSHF(SEXT(PCoffset9), 1);
+
+    n is 11th bit, z is 10th bit, p is 9th bit
+  */
+  int nzp = instructionRegister >> 9; // get the nzp bits
+  int n = 0;
+  int z = 0;
+  int p = 0;
+  // 000, 001, 010, 011, 100, 101, 110, 111
+  switch (nzp) {
+    case 1:
+    {
+      p = 1;
+      break;
+    }
+    case 2:
+    {
+      z = 1;
+      break;
+    }
+    case 3:
+    {
+      z = 1;
+      p = 1;
+      break;
+    }
+    case 4:
+    {
+      n = 1;
+      break;
+    }
+    case 5:
+    {
+      n = 1;
+      p = 1; 
+      break;
+    }
+    case 6:
+    {
+      n = 1;
+      z = 1;
+      break;
+    }
+    case 7:
+    {
+      n = 1;
+      z = 1;
+      p = 1;
+      break;
+    }
+
+  } 
+  if (n & CURRENT_LATCHES.N || z & CURRENT_LATCHES.Z || p & CURRENT_LATCHES.P) {
+    int pcOffset9 = (instructionRegister & 0x01FF); // get only the offset from the word
+    NEXT_LATCHES.PC = Low16bits(NEXT_LATCHES.PC + Low16bits(sext(pcOffset9, 9)));
+  }
+
+
+  // if nzp then registers = 1, 110, 11100
+  
+  } else if (opcode == 1){ // add
+  /*
+  if (bit[5] == 0)
+    DR = SR1 + SR2;
+  else
+    DR = SR1 + SEXT(imm5);
+  setcc();
+  */
+  int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
+  
+  int sourceRegister1 = ((instructionRegister) & 0x01C0)>> 6;
+  
+  int A = ((instructionRegister) & 0x0020)>> 5;
+  if(A == 0 ){
+    int sourceRegister2 = ((instructionRegister) & 0x0007); 
+    
+    NEXT_LATCHES.REGS[destinationRegister] = Low16bits(CURRENT_LATCHES.REGS[sourceRegister1] + CURRENT_LATCHES.REGS[sourceRegister2]);
+  } else if (A){
+    int imm5 = ((instructionRegister) & 0x001F);
+    NEXT_LATCHES.REGS[destinationRegister] = Low16bits(CURRENT_LATCHES.REGS[sourceRegister1] + sext(imm5, 5));
+  }
+  setcc(NEXT_LATCHES.REGS[destinationRegister]);
+  
+  } else if (opcode == 2){ // ldb
+/*
+DR = SEXT(mem[BaseR + SEXT(boffset6)]); 
+setcc();
+*/
+  int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
+  int baseRegister = ((instructionRegister) & 0x01C0)>> 6;
+  int bOffset6 = ((instructionRegister) & 0x003F); 
+
+  int memAddress = Low16bits(CURRENT_LATCHES.REGS[baseRegister] + sext(bOffset6, 6));
+  int whichByte = memAddress%2;
+  memAddress /= 2;
+
+  NEXT_LATCHES.REGS[destinationRegister] = sext(MEMORY[memAddress][whichByte], 8); 
+  setcc(NEXT_LATCHES.REGS[destinationRegister]);
+  
+  } else if (opcode == 3){ // stb
+/*
+mem[BaseR + SEXT(boffset6)] = SR[7:0];
+*/
+   int sourceRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
+  int baseRegister = ((instructionRegister) & 0x01C0)>> 6;
+  int bOffset6 = ((instructionRegister) & 0x003F); 
+
+  int memAddress = Low16bits(CURRENT_LATCHES.REGS[baseRegister] + sext(bOffset6, 6));
+  int whichByte = memAddress%2;
+  memAddress /= 2;
+  MEMORY[memAddress][whichByte] = CURRENT_LATCHES.REGS[sourceRegister] & 0x00FF;
+
+
+  } else if (opcode == 4){ // jsr(r)
+
+  /*
+R7 = PC ;
+if (bit[11] == 0)
+PC = BaseR; else
+PC = PC + LSHF(SEXT(PCoffset11), 1);
+  */
+    int pc = NEXT_LATCHES.PC;
+    int bit11 = ((instructionRegister) & 0x0800);
+    if (bit11 == 1) {
+      int pcoffset11 = ((instructionRegister) & 0x07FF);
+            NEXT_LATCHES.PC = Low16bits(pc + sext(pcoffset11, 11)<<1);
+    } else {
+        int baseRegister = ((instructionRegister) & 0x01C0); // 0000 0001 1100 0000
+        NEXT_LATCHES.PC = CURRENT_LATCHES.REGS[baseRegister];
+    }
+      NEXT_LATCHES.REGS[7] = pc;
+
+  } else if (opcode == 5){ // and
+/*
+if (bit[5] == 0)
+DR = SR1 AND SR2;
+else
+DR = SR1 AND SEXT(imm5);
+setcc();
+*/
+  int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
+  int sourceRegister1 = ((instructionRegister) & 0x01C0)>> 6;
+  int A = ((instructionRegister) & 0x0010)>> 5;
+
+  if(A == 0 ){
+    int sourceRegister2 = ((instructionRegister) & 0x0007); 
+    NEXT_LATCHES.REGS[destinationRegister] = Low16bits(CURRENT_LATCHES.REGS[sourceRegister1] & CURRENT_LATCHES.REGS[sourceRegister2]);
+  } else {
+    int imm5 = ((instructionRegister) & 0x001F);
+    NEXT_LATCHES.REGS[destinationRegister] = Low16bits(CURRENT_LATCHES.REGS[sourceRegister1] & sext(imm5, 5));
+  }
+  setcc(NEXT_LATCHES.REGS[destinationRegister]);
+  
+
+  } else if (opcode == 6){ // ldw
+/*
+DR = MEM[BaseR + LSHF(SEXT(offset6), 1)];
+setcc();
+*/
+  int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
+  int baseRegister = ((instructionRegister) & 0x01C0)>> 6;
+  int bOffset6 = ((instructionRegister) & 0x003F); 
+
+  int memAddress = Low16bits(CURRENT_LATCHES.REGS[baseRegister] + sext(bOffset6, 6))/2;
+
+  NEXT_LATCHES.REGS[destinationRegister] = MEMORY[memAddress][0] + (MEMORY[memAddress][1] >> 8); 
+  setcc(NEXT_LATCHES.REGS[destinationRegister]);
+
+
+  } else if (opcode == 7){ // stw
+/*
+MEM[BaseR + LSHF(SEXT(offset6), 1)] = SR;
+*/
+  int sourceRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
+  int baseRegister = ((instructionRegister) & 0x01C0)>> 6;
+  int bOffset6 = ((instructionRegister) & 0x003F); 
+
+  int memAddress = Low16bits(CURRENT_LATCHES.REGS[baseRegister] + sext(bOffset6, 6)<<1)/2;
+  MEMORY[memAddress][1] = CURRENT_LATCHES.REGS[sourceRegister] >> 8;
+  MEMORY[memAddress][0] = CURRENT_LATCHES.REGS[sourceRegister] & 0x00FF;
+
+  }  // rti --- assuming rti is not in our input file
+/*
+if (PSR[15] == 1) privilege mode violation PC = MEM[R6]; R6 is the SSP
+R6 = R6 + 2;
+TEMP = MEM[R6];
+R6 = R6+2
+PSR = TEMP; the privilege mode and condition codes of the interrupted process are restored
+*/
+  else if (opcode == 9){ // xor
+/*
+
+if (bit[5] == 0)
+DR = SR1 XOR SR2;
+else
+DR = SR1 XOR SEXT(imm5);
+setcc();
+*/
+  int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
+  int sourceRegister1 = ((instructionRegister) & 0x01C0)>> 6;
+  int A = ((instructionRegister) & 0x0010)>> 5;
+
+  if(A == 0 ){
+    int sourceRegister2 = ((instructionRegister) & 0x0007); 
+    NEXT_LATCHES.REGS[destinationRegister] = Low16bits(CURRENT_LATCHES.REGS[sourceRegister1] ^ CURRENT_LATCHES.REGS[sourceRegister2]);
+  } else {
+    int imm5 = ((instructionRegister) & 0x001F);
+    NEXT_LATCHES.REGS[destinationRegister] = Low16bits(CURRENT_LATCHES.REGS[sourceRegister1]  ^ sext(imm5, 5));
+  }
+  setcc(NEXT_LATCHES.REGS[destinationRegister]);
+  }  // 10 and 11 not used
+  else if (opcode == 12){  // jmp
+/*
+PC = BaseR;
+*/
+  int baseRegister = ((instructionRegister) & 0x01C0)>> 6;
+  NEXT_LATCHES.PC = CURRENT_LATCHES.REGS[baseRegister];
+
+  } else if (opcode == 13){ // shf
+/*
+if (bit[4] == 0)
+DR = LSHF(SR, amount4);
+else
+if (bit[5] == 0)
+DR = RSHF(SR, amount4, 0); 
+else
+DR = RSHF(SR, amount4, SR[15]); 
+setcc();
+
+Bit [4] determines the direction (left or right) of the shift; bit [5] determines whether a right shift is arithmetic or logical. 
+If bit [4] is 0, the source operand in SR is shifted left by the number of bit positions indicated by amount4. 
+If bit [4] is 1, the source operand is shifted right by amount4 bits. 
+If the operation is a right shift, bit [5] of the instruction determines whether the sign bit of the original source operand is preserved. 
+If bit [5] is 1, the right shift is an arithmetic shift; thus the original SR[15] is shifted into the vacated bit positions. If bit[5] is 0, zeroes are shifted into the vacated bit positions. 
+The result is stored in DR. The condition codes are set, based on whether the result is negative, zero, or positive.
+
+
+*/
+  int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
+  int sourceRegister1 = ((instructionRegister) & 0x01C0)>> 6;
+  int bit5 = ((instructionRegister) & 0x0020)>>5;
+  int bit4 = ((instructionRegister) & 0x0010)>>4;
+  int amount4 = ((instructionRegister) & 0x000F);
+  if(!bit4){
+    NEXT_LATCHES.REGS[destinationRegister] = Low16bits(CURRENT_LATCHES.REGS[sourceRegister1] << amount4);
+  } else if (bit5==0){
+    NEXT_LATCHES.REGS[destinationRegister] = CURRENT_LATCHES.REGS[sourceRegister1] >> amount4;
+  }else if (bit5){
+    // thus the original SR[15] is shifted into the vacated bit positions. If bit[5] is 0, zeroes are shifted into the vacated bit positions. 
+    if(CURRENT_LATCHES.REGS[sourceRegister1] >> 15 == 0)
+      NEXT_LATCHES.REGS[destinationRegister] = CURRENT_LATCHES.REGS[sourceRegister1] >> amount4;
+    else { // otherwise, we need to rotate the numbers
+      int temp = CURRENT_LATCHES.REGS[sourceRegister1];
+      // shift the bits to the next index
+      while(amount4 > 1){
+        temp =  (temp>>1) + 0x8000; // iteratively add 1's into the register
+        amount4--;
+      }
+      NEXT_LATCHES.REGS[destinationRegister] = temp;
+    }
+  }
+
+  setcc(destinationRegister);
+
+  } else if (opcode == 14){ // lea
+
+  /*
+DR = PC + LSHF(SEXT(PCoffset9),1); 
+setcc();
+  */
+ int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
+   int pcOffset9 = (instructionRegister & 0x01FF); // get only the offset from the word
+  NEXT_LATCHES.REGS[destinationRegister] = Low16bits(NEXT_LATCHES.PC + Low16bits(sext(pcOffset9, 9) << 1));
+
+  } else if (opcode == 15){ // trap
+/*
+R7 = PC ;
+PC = MEM[LSHF(ZEXT(trapvect8), 1)];
+*/ 
+  NEXT_LATCHES.REGS[7] = NEXT_LATCHES.PC;
+  int trapvect8 = (instructionRegister & 0x00FF);
+   NEXT_LATCHES.PC =  (MEMORY[trapvect8][1] << 8) + MEMORY[trapvect8][0];
+
+
+
+  } 
+
+
+
+
+
+
+
+
 
 }
