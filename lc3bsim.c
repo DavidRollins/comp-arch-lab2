@@ -3,10 +3,10 @@
     in this comment.
     REFER TO THE SUBMISSION INSTRUCTION FOR DETAILS
 
-    Name 1: Full name of the first partner 
-    Name 2: Full name of the second partner
-    UTEID 1: UT EID of the first partner
-    UTEID 2: UT EID of the second partner
+    Name 1: Dilya Anvarbekova 
+    Name 2: David Rollins
+    UTEID 1: da28364
+    UTEID 2: der2366
 */
 
 /***************************************************************/
