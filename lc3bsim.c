@@ -561,7 +561,7 @@ setcc();
 /*
 mem[BaseR + SEXT(boffset6)] = SR[7:0];
 */
-   int sourceRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
+  int sourceRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
   int baseRegister = ((instructionRegister) & 0x01C0)>> 6;
   int bOffset6 = ((instructionRegister) & 0x003F); 
 
@@ -618,12 +618,11 @@ DR = MEM[BaseR + LSHF(SEXT(offset6), 1)];
 setcc();
 */
   int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
-  int baseRegister = ((instructionRegister) & 0x01C0)>> 6;
+  int baseRegister = ((instructionRegister) & 0x01C0) >> 6;
   int bOffset6 = ((instructionRegister) & 0x003F); 
 
-  int memAddress = Low16bits(CURRENT_LATCHES.REGS[baseRegister] + sext(bOffset6, 6))/2;
-
-  NEXT_LATCHES.REGS[destinationRegister] = MEMORY[memAddress][0] + (MEMORY[memAddress][1] >> 8); 
+  int memAddress = Low16bits(CURRENT_LATCHES.REGS[baseRegister] + (sext(bOffset6, 6) << 1))/2;
+  NEXT_LATCHES.REGS[destinationRegister] = MEMORY[memAddress][0] + (MEMORY[memAddress][1] << 8); 
   setcc(NEXT_LATCHES.REGS[destinationRegister]);
 
 
@@ -635,7 +634,7 @@ MEM[BaseR + LSHF(SEXT(offset6), 1)] = SR;
   int baseRegister = ((instructionRegister) & 0x01C0)>> 6;
   int bOffset6 = ((instructionRegister) & 0x003F); 
 
-  int memAddress = Low16bits(CURRENT_LATCHES.REGS[baseRegister] + sext(bOffset6, 6)<<1)/2;
+  int memAddress = Low16bits(CURRENT_LATCHES.REGS[baseRegister] + (sext(bOffset6, 6)<<1))/2;
   MEMORY[memAddress][1] = CURRENT_LATCHES.REGS[sourceRegister] >> 8;
   MEMORY[memAddress][0] = CURRENT_LATCHES.REGS[sourceRegister] & 0x00FF;
 
@@ -647,7 +646,7 @@ TEMP = MEM[R6];
 R6 = R6+2
 PSR = TEMP; the privilege mode and condition codes of the interrupted process are restored
 */
-  else if (opcode == 9){ // xor
+  else if (opcode == 9){ // xor, not
 /*
 
 if (bit[5] == 0)
@@ -701,6 +700,7 @@ The result is stored in DR. The condition codes are set, based on whether the re
   int bit5 = ((instructionRegister) & 0x0020)>>5;
   int bit4 = ((instructionRegister) & 0x0010)>>4;
   int amount4 = ((instructionRegister) & 0x000F);
+
   if(!bit4){
     NEXT_LATCHES.REGS[destinationRegister] = Low16bits(CURRENT_LATCHES.REGS[sourceRegister1] << amount4);
   } else if (bit5==0){
@@ -739,9 +739,7 @@ PC = MEM[LSHF(ZEXT(trapvect8), 1)];
 */ 
   NEXT_LATCHES.REGS[7] = NEXT_LATCHES.PC;
   int trapvect8 = (instructionRegister & 0x00FF);
-   NEXT_LATCHES.PC =  (MEMORY[trapvect8][1] << 8) + MEMORY[trapvect8][0];
-
-
+  NEXT_LATCHES.PC =  ((MEMORY[trapvect8][1] << 8) + MEMORY[trapvect8][0]);
 
   } 
 
