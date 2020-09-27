@@ -1,0 +1,32 @@
+
+Current register/bus values :
+-------------------------------------
+Instruction Count : 10
+PC                : 0x3014
+CCs: N = 1  Z = 0  P = 0
+Registers:
+0: 0x3018
+1: 0xffd0
+2: 0x0000
+3: 0x0000
+4: 0x0000
+5: 0x0000
+6: 0x0000
+7: 0x0000
+
+
+Current register/bus values :
+-------------------------------------
+Instruction Count : 11
+PC                : 0x3018
+CCs: N = 1  Z = 0  P = 0
+Registers:
+0: 0x3018
+1: 0xffd0
+2: 0x0000
+3: 0x0000
+4: 0x0000
+5: 0x0000
+6: 0x0000
+7: 0x3016
+

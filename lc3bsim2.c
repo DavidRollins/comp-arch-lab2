@@ -511,8 +511,8 @@ void process_instruction(){
 
   } 
   if (n & CURRENT_LATCHES.N || z & CURRENT_LATCHES.Z || p & CURRENT_LATCHES.P) {
-    int pcOffset9 = (instructionRegister & 0x01FF); // get only the offset from the word
-    NEXT_LATCHES.PC = Low16bits(NEXT_LATCHES.PC + Low16bits(sext(pcOffset9, 9)));
+    int pcOffset9 = (instructionRegister & 0x01FF); // get only the offset from the word 
+    NEXT_LATCHES.PC = Low16bits(NEXT_LATCHES.PC + Low16bits(sext(pcOffset9, 9) << 1));
   }
 
 
@@ -554,7 +554,7 @@ setcc();
   int whichByte = memAddress%2;
   memAddress /= 2;
 
-  NEXT_LATCHES.REGS[destinationRegister] = sext(MEMORY[memAddress][whichByte], 8); 
+  NEXT_LATCHES.REGS[destinationRegister] = Low16bits(sext(MEMORY[memAddress][whichByte], 8)); 
   setcc(NEXT_LATCHES.REGS[destinationRegister]);
   
   } else if (opcode == 3){ // stb
