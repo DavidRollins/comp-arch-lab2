@@ -547,7 +547,7 @@ DR = SEXT(mem[BaseR + SEXT(boffset6)]);
 setcc();
 */
   int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
-  int baseRegister = ((instructionRegister) & 0x01C0)>> 6;
+  int baseRegister = ((instructionRegister) & 0x01C0) >> 6;
   int bOffset6 = ((instructionRegister) & 0x003F); 
 
   int memAddress = Low16bits(CURRENT_LATCHES.REGS[baseRegister] + sext(bOffset6, 6));
@@ -580,7 +580,7 @@ PC = BaseR; else
 PC = PC + LSHF(SEXT(PCoffset11), 1);
   */
     int pc = NEXT_LATCHES.PC;
-    int bit11 = ((instructionRegister) & 0x0800);
+    int bit11 = ((instructionRegister) & 0x0800); // 0000 1000 0000 0000
     if (bit11 == 1) {
       int pcoffset11 = ((instructionRegister) & 0x07FF);
             NEXT_LATCHES.PC = Low16bits(pc + sext(pcoffset11, 11)<<1);
@@ -600,8 +600,7 @@ setcc();
 */
   int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
   int sourceRegister1 = ((instructionRegister) & 0x01C0)>> 6;
-  int A = ((instructionRegister) & 0x0010)>> 5;
-
+  int A = ((instructionRegister) & 0x0020)>> 5;
   if(A == 0 ){
     int sourceRegister2 = ((instructionRegister) & 0x0007); 
     NEXT_LATCHES.REGS[destinationRegister] = Low16bits(CURRENT_LATCHES.REGS[sourceRegister1] & CURRENT_LATCHES.REGS[sourceRegister2]);
@@ -657,7 +656,7 @@ setcc();
 */
   int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
   int sourceRegister1 = ((instructionRegister) & 0x01C0)>> 6;
-  int A = ((instructionRegister) & 0x0010)>> 5;
+  int A = ((instructionRegister) & 0x0020)>> 5;
 
   if(A == 0 ){
     int sourceRegister2 = ((instructionRegister) & 0x0007); 
@@ -698,7 +697,8 @@ The result is stored in DR. The condition codes are set, based on whether the re
   int destinationRegister = ((instructionRegister) & 0x0E00)>> 9; // want bits 9, 10, 11 X0E00
   int sourceRegister1 = ((instructionRegister) & 0x01C0)>> 6;
   int bit5 = ((instructionRegister) & 0x0020)>>5;
-  int bit4 = ((instructionRegister) & 0x0010)>>4;
+  int bit4 = ((instructionRegister) & 0x0010)>>4;  
+
   int amount4 = ((instructionRegister) & 0x000F);
 
   if(!bit4){
@@ -707,13 +707,15 @@ The result is stored in DR. The condition codes are set, based on whether the re
     NEXT_LATCHES.REGS[destinationRegister] = CURRENT_LATCHES.REGS[sourceRegister1] >> amount4;
   }else if (bit5){
     // thus the original SR[15] is shifted into the vacated bit positions. If bit[5] is 0, zeroes are shifted into the vacated bit positions. 
-    if(CURRENT_LATCHES.REGS[sourceRegister1] >> 15 == 0)
+    if(CURRENT_LATCHES.REGS[sourceRegister1] >> 15 == 0){
       NEXT_LATCHES.REGS[destinationRegister] = CURRENT_LATCHES.REGS[sourceRegister1] >> amount4;
+   
+    }
     else { // otherwise, we need to rotate the numbers
       int temp = CURRENT_LATCHES.REGS[sourceRegister1];
       // shift the bits to the next index
-      while(amount4 > 1){
-        temp =  (temp>>1) + 0x8000; // iteratively add 1's into the register
+      while(amount4 > 0){
+        temp = (temp>>1) + 0x8000; // iteratively add 1's into the register
         amount4--;
       }
       NEXT_LATCHES.REGS[destinationRegister] = temp;
